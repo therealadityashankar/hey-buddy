@@ -45,7 +45,7 @@ The easiest way to install and use Hey Buddy is with [Anaconda/Miniconda](https:
 wget https://raw.githubusercontent.com/painebenjamin/hey-buddy/refs/heads/main/environment.yml
 conda env create -f environment.yml
 conda activate heybuddy
-pip install heybuddy
+pip install heybuddy[gpu]
 ```
 
 If you already have a working CUDA environment, you can just skip to `pip install heybuddy`. You will need to install `piper-phonemize` separately in this case, see [the rhasspy/piper-phonemizer releases page on GitHub](https://github.com/rhasspy/piper-phonemize/releases/) to find the latest wheel for your python version - for example, the environment file uses python 3.10, so it installs `https://github.com/rhasspy/piper-phonemize/releases/download/v1.1.0/piper_phonemize-1.1.0-cp310-cp310-manylinux_2_28_x86_64.whl`.
