@@ -1,34 +1,4 @@
 /**
- * Play audio samples using the Web Audio API.
- * @param {Float32Array} audioSamples - The audio samples to play.
- * @param {number} sampleRate - The sample rate of the audio samples.
- */
-function playAudioSamples(audioSamples, sampleRate = 16000) {
-    // Create an AudioContext
-    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-
-    // Create an AudioBuffer
-    const audioBuffer = audioContext.createBuffer(
-        1, // number of channels
-        audioSamples.length, // length of the buffer in samples
-        sampleRate // sample rate (samples per second)
-    );
-
-    // Fill the AudioBuffer with the Float32Array of audio samples
-    audioBuffer.getChannelData(0).set(audioSamples);
-
-    // Create a BufferSource node
-    const source = audioContext.createBufferSource();
-    source.buffer = audioBuffer;
-
-    // Connect the source to the AudioContext's destination (the speakers)
-    source.connect(audioContext.destination);
-
-    // Start playback
-    source.start();
-};
-
-/**
  * Turns floating-point audio samples to a Wave blob.
  * @param {Float32Array} audioSamples - The audio samples to play.
  * @param {number} sampleRate - The sample rate of the audio samples.
@@ -121,7 +91,7 @@ const options = {
 };
 
 /** Main */
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
     /** DOM elements */
     const graphsContainer = document.getElementById("graphs");
     const audioContainer = document.getElementById("audio");
@@ -131,6 +101,14 @@ document.addEventListener("DOMContentLoaded", () => {
     const history = {};
     const current = {};
     const active = {};
+
+    /** Get user media to request permission and start the microphone */
+    try {
+        await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (error) {
+        alert("Microphone access has been denied, this demo will not function. Please reset audio permissions and refresh the page to try again.");
+        return;
+    }
 
     /** Instantiate */
     const heyBuddy = new HeyBuddy(options);

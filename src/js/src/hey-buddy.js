@@ -26,8 +26,6 @@ export class HeyBuddy {
      * @param {string} [options.spectrogramModelPath="/pretrained/mel-spectrogram.onnx"] - Path to mel spectrogram model.
      * @param {number} [options.batchSeconds=1.08] - Number of seconds per batch.
      * @param {number} [options.batchIntervalSeconds=0.12] - Number of seconds between batches.
-     * @param {string} [options.workletUrl="/worklet.js"] - URL for AudioWorklet.
-     * @param {string} [options.workletName="hey-buddy"] - Name for AudioWorklet.
      * @param {number} [options.targetSampleRate=16000] - Target sample rate for audio.
      * @param {number} [options.spectrogramMelBins=32] - Number of mel bins for spectrogram.
      * @param {number} [options.embeddingDim=96] - Dimension of speech embedding.
@@ -53,24 +51,12 @@ export class HeyBuddy {
         const spectrogramModelPath = options.spectrogramModelPath || "/pretrained/mel-spectrogram.onnx";
         const batchSeconds = options.batchSeconds || 1.08; // 1080ms * 16khz = 17280 samples
         const batchIntervalSeconds = options.batchIntervalSeconds || 0.12; // 120ms * 16khz = 1920 samples
-        const workletUrl = options.workletUrl || "/hey-buddy-worklet.js";
-        const workletName = options.workletName || "hey-buddy";
         const targetSampleRate = options.targetSampleRate || 16000;
         const spectrogramMelBins = options.spectrogramMelBins || 32;
         const embeddingDim = options.embeddingDim || 96;
         const embeddingWindowSize = options.embeddingWindowSize || 76;
         const embeddingWindowStride = options.embeddingWindowStride || 8;
         const wakeWordEmbeddingFrames = options.wakeWordEmbeddingFrames || 16;
-
-        // Initialize batcher and add callback
-        this.batcher = new AudioBatcher(
-            batchSeconds,
-            batchIntervalSeconds,
-            workletUrl,
-            workletName,
-            targetSampleRate
-        );
-        this.batcher.onBatch((batch) => this.process(batch));
 
         // Initialize shared models
         this.vad = new SileroVAD(vadModelPath);
@@ -118,6 +104,14 @@ export class HeyBuddy {
         this.recordingCallbacks = [];
         this.processedCallbacks = [];
         this.detectedCallbacks = [];
+
+        // Initialize batcher and add callback
+        this.batcher = new AudioBatcher(
+            batchSeconds,
+            batchIntervalSeconds,
+            targetSampleRate
+        );
+        this.batcher.onBatch((batch) => this.process(batch));
     }
 
     /**
@@ -214,7 +208,7 @@ export class HeyBuddy {
         }
         if (this.debug) {
             const recordingLength = this.audioBuffer.length;
-            const recordedDuration = recordingLength / this.batcher.workletTargetSampleRate;
+            const recordedDuration = recordingLength / this.batcher.targetSampleRate;
             console.log(`Dispatching recording with ${recordingLength} frames (${recordedDuration} s)`);
         }
         for (let callback of this.recordingCallbacks) {
@@ -445,4 +439,6 @@ export class HeyBuddy {
     }
 };
 
-window.HeyBuddy = HeyBuddy;
+if (typeof window !== "undefined") {
+    window.HeyBuddy = HeyBuddy;
+}

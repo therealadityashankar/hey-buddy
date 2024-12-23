@@ -1,4 +1,8 @@
 /** @module audio */
+// Minified worklet code
+const workletName = "hey-buddy";
+const workletBlob = new Blob([`(()=>{class t extends AudioWorkletProcessor{constructor(t){super(t),this.targetSampleRate=t.processorOptions.targetSampleRate,this.inputBuffer=new Float32Array(this.inputFrameSize),this.inputBufferSize=0,this.outputBuffer=new Float32Array(this.targetFrameSize)}get inputFrameSize(){return Math.round(sampleRate/50)}get targetFrameSize(){return Math.round(this.targetSampleRate/50)}async flush(){const t=sampleRate/this.targetSampleRate;this.outputBuffer.fill(0);for(let e=0;e<this.targetFrameSize;e++){const i=e*t,r=Math.floor(i),s=Math.min(r+1,this.targetFrameSize-1),u=i-r;this.outputBuffer[e]=this.inputBuffer[r]*(1-u)+this.inputBuffer[s]*u}await this.port.postMessage(this.outputBuffer)}pushAudio(t){const e=t.length,i=this.inputFrameSize-this.inputBufferSize;if(e<i)return this.inputBuffer.set(t,this.inputBufferSize),void(this.inputBufferSize+=e);this.inputBuffer.set(t.subarray(0,i),this.inputBufferSize),this.flush(),this.inputBufferSize=0,this.pushAudio(t.subarray(i))}process(t,e,i){return this.pushAudio(t[0][0]),!0}}registerProcessor("${workletName}",t)})();`], {type: "application/javascript"});
+const workletUrl = URL.createObjectURL(workletBlob);
 
 /**
  * A class that batches audio samples and calls a callback with the batch.
@@ -7,25 +11,19 @@ export class AudioBatcher {
     /**
      * @param {number} batchSeconds - The number of seconds to batch.
      * @param {number} batchIntervalSeconds - The number of seconds to wait before calling the callback.
-     * @param {string} workletUrl - The URL of the worklet to use.
-     * @param {string} workletName - The name of the worklet to use.
-     * @param {number} workletTargetSampleRate - The target sample rate of the worklet.
+     * @param {number} targetSampleRate - The target sample rate of the worklet.
      */
     constructor(
         batchSeconds=2.0,
         batchIntervalSeconds=0.05, // 50ms
-        workletUrl="/worklet.js",
-        workletName="hey-buddy",
-        workletTargetSampleRate=16000,
+        targetSampleRate=16000,
     ) {
         this.initialized = false;
         this.callbacks = [];
         this.batchSeconds = batchSeconds;
         this.batchIntervalSeconds = batchIntervalSeconds;
         this.batchIntervalCount = 0;
-        this.workletUrl = workletUrl;
-        this.workletName = workletName;
-        this.workletTargetSampleRate = workletTargetSampleRate;
+        this.targetSampleRate = targetSampleRate;
         this.buffer = new Float32Array(this.batchSamples);
         this.buffer.fill(0);
         this.initialize();
@@ -36,7 +34,7 @@ export class AudioBatcher {
      * @type {number}
      */
     get batchSamples() {
-        return Math.floor(this.batchSeconds * this.workletTargetSampleRate);
+        return Math.floor(this.batchSeconds * this.targetSampleRate);
     }
 
     /**
@@ -44,7 +42,14 @@ export class AudioBatcher {
      * @type {number}
      */
     get batchIntervalSamples() {
-        return Math.floor(this.batchIntervalSeconds * this.workletTargetSampleRate);
+        return Math.floor(this.batchIntervalSeconds * this.targetSampleRate);
+    }
+
+    /**
+     * Clears the buffer.
+     */
+    clearBuffer() {
+        this.buffer.fill(0);
     }
 
     /**
@@ -103,14 +108,13 @@ export class AudioBatcher {
         );
         this.workerNode = await AudioNode.create(
             this.audioContext,
-            this.workletUrl,
-            this.workletName,
-            this.workletTargetSampleRate,
+            this.targetSampleRate,
         );
         this.sourceNode.connect(this.workerNode.worker);
         this.workerNode.worker.port.onmessage = (event) => {
             this.push(event.data);
         }
+        this.clearBuffer();
         this.initialized = true;
     }
 }
@@ -131,16 +135,14 @@ export class AudioNode {
     /**
      * Creates an AudioNode.
      * @param {AudioContext} context - The audio context.
-     * @param {string} workletUrl - The URL of the worklet to use.
-     * @param {string} workletName - The name of the worklet to use.
-     * @param {number} workletTargetSampleRate - The target sample rate of the worklet.
+     * @param {number} targetSampleRate - The target sample rate of the worklet.
      * @returns {Promise<AudioNode>} The created AudioNode.
      */
-    static async create(context, workletUrl, workletName, workletTargetSampleRate) {
+    static async create(context, targetSampleRate) {
         await context.audioWorklet.addModule(workletUrl);
         const workletOptions = {
             processorOptions: {
-                targetSampleRate: workletTargetSampleRate,
+                targetSampleRate: targetSampleRate,
             }
         };
         const worker = new AudioWorkletNode(context, workletName, workletOptions);

@@ -2,23 +2,17 @@ const path = require('path');
 const TerserPlugin = require('terser-webpack-plugin');
 
 module.exports = {
-    name: 'main',
-    entry: './src/hey-buddy.js',
+    name: 'worklet',
+    entry: './worklet.js',
     output: {
-        path: path.resolve(__dirname, 'dist'),
-        filename: 'hey-buddy.min.js',
-        library: 'hey-buddy',
-        libraryTarget: 'umd',
-        globalObject: 'this',
+        path: path.resolve(__dirname, 'build'),
+        filename: 'worklet.min.js',
     },
     module: {
         rules: [
             {
                 test: /\.js$/,
                 exclude: /node_modules/,
-                use: {
-                    loader: 'babel-loader',
-                },
             },
         ],
     },

@@ -1,9 +1,28 @@
-{
-  "name": "hey-buddy",
-  "version": "1.0.0",
+{                                                                                  
+  "name": "hey-buddy",                                                             
+  "version": "0.1.1",                                                              
+  "description": "Audio WakeWord Detection",                          
+  "keywords": [                                                                    
+    "wakeword",                          
+    "audio",
+    "detection",
+    "onnxruntime",
+    "web"
+  ],
+  "author": "Benjamin Paine <painebenjamin@gmail.com>",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/painebenjamin/hey-buddy.git"
+  },
+  "bugs": {
+    "url": "https://github.com/painebenjamin/hey-buddy/issues"
+  },
+  "homepage": "https://github.com/painebenjamin/hey-buddy#README",
   "main": "dist/hey-buddy.min.js",
   "scripts": {
     "build": "webpack --config webpack.config.js",
+    "worklet": "webpack --config worklet.config.js",
     "start": "node server.js"
   },
   "dependencies": {

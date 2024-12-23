@@ -3,15 +3,21 @@ import { sleep } from "./helpers.js";
 
 let initialized = false, Tensor, InferenceSession;
 
-if (window.ort !== undefined) {
+if (typeof ort !== "undefined") {
     initialized = true;
-    Tensor = window.ort.Tensor;
-    InferenceSession = window.ort.InferenceSession;
+    Tensor = ort.Tensor;
+    InferenceSession = ort.InferenceSession;
 } else {
-    import(/* webpackIgnore: true */"./onnxruntime-web/ort.mjs").then((module) => {
+    import(/*webpackIgnore: true */"onnxruntime-web").then((module) => {
         initialized = true;
         Tensor = module.Tensor;
         InferenceSession = module.InferenceSession;
+    }).catch(() => {
+        import(/* webpackIgnore: true */"./onnxruntime-web/ort.mjs").then((module) => {
+            initialized = true;
+            Tensor = module.Tensor;
+            InferenceSession = module.InferenceSession;
+        });
     });
 }
 
