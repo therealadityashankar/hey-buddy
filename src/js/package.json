@@ -1,9 +1,9 @@
-{                                                                                  
-  "name": "hey-buddy",                                                             
-  "version": "0.1.1",                                                              
-  "description": "Audio WakeWord Detection",                          
-  "keywords": [                                                                    
-    "wakeword",                          
+{
+  "name": "hey-buddy-onnx",
+  "version": "0.1.1",
+  "description": "Audio WakeWord Detection",
+  "keywords": [
+    "wakeword",
     "audio",
     "detection",
     "onnxruntime",
