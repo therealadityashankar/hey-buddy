@@ -327,18 +327,27 @@ A number of evaluation metrics are recorded during training. The best way to acc
 
 ## JavaScript API
 
-**Hey Buddy!** is distributed as **two** JavaScript files that should be made available through any implementing web application:
+**Hey Buddy!** is distributed a single minified javascript file, available through npm or other popular CDNs.
 
-1. `hey-buddy.min.js` (90 kB) which provides the HeyBuddy API, and
-2. `hey-buddy-worklet.js` (1 kB) which implements the Audio Worklet interface which will be imported by the browser automatically.
+### Node
 
-You need to make the ONNX runtime available prior to importing the HeyBuddy JS API. The easiest way to do this is to use a JS CDN, like so:
+Install from NPM:
+
+```
+npm install hey-buddy-onnx
+```
+
+### Browser
+
+You need to make the ONNX runtime available prior to importing the HeyBuddy JS API.
+
+The easiest way to do this and use HeyBuddy is like so:
 
 ```html
 <!-- ONNX Runtime -->
 <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.19.0/dist/ort.min.js"></script>
 <!-- Hey Buddy API -->
-<script src="/path/to/my/website/hey-buddy.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/hey-buddy-onnx@0.1.2/dist/hey-buddy.min.js"></script>
 <!-- Your Code -->
 <script>...</script>
 ```
@@ -351,7 +360,6 @@ Your implementation code could look something like this:
 const options = {
     record: true, // disable when not needed to save memory
     modelPath: ["/models/my-model.onnx", "/models/my-other-model.onnx"], // Also accepts single strings
-    // workletUrl: /path/to/my/website/hey-buddy-worklet.js // Only needed if not at the same path as the library code
 };
 
 const heyBuddy = new HeyBuddy(options);
