@@ -78,7 +78,7 @@ const colors = {
     "speech": [22,200,206],
     "frame budget": [25,255,25]
 };
-const rootUrl = "";
+const rootUrl = "https://huggingface.co/benjamin-paine/hey-buddy/resolve/main";
 const wakeWords = ["buddy", "hey buddy", "hi buddy", "sup buddy", "yo buddy", "okay buddy", "hello buddy"];
 const canvasSize = { width: 640, height: 100 };
 const graphLineWidth = 1;
