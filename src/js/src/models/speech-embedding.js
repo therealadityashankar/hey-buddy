@@ -5,6 +5,7 @@ import { MelSpectrogram } from "./mel-spectrogram.js";
 
 /**
  * Speech Embedding model
+ * get ths embeddings from a mel spectogram
  * @extends ONNXModel
  */
 export class SpeechEmbedding extends ONNXModel {
@@ -16,18 +17,17 @@ export class SpeechEmbedding extends ONNXModel {
      * @param {number} embeddingDim - Dimension of the embeddings
      * @param {number} windowSize - Size of the window
      * @param {number} windowStride - Stride of the window
-     * @param {number} sampleRate - Sample rate of the input audio
      */
     constructor(
         modelPath,
+        embeddingDim = 96,
+        windowSize = 76,
+        windowStride = 8,
         power = 0,
         webnn = 1,
         webgpu = 2,
         webgl = 3,
         wasm = 4,
-        embeddingDim = 96,
-        windowSize = 76,
-        windowStride = 8,
     ) {
         super(
             modelPath,
@@ -65,6 +65,28 @@ export class SpeechEmbedding extends ONNXModel {
             console.error("Unexpected speech embedding result", result);
             throw new Error("Speech embedding model failed");
         }
+    }
+
+    /**
+     * Extracts speech embeddings from a mel spectrogram output
+     * 
+     * This function takes the output from a mel spectrogram model, creates an ONNX tensor
+     * with the appropriate dimensions, and runs it through the speech embedding model to
+     * generate embeddings that can be used for wake word detection.
+     * 
+     * @param {Object} melSpectogramOutput - The output tensor from a mel spectrogram model
+     * @param {Float32Array} melSpectogramOutput.data - The raw data from the mel spectrogram
+     * @param {Array<number>} melSpectogramOutput.dims - The dimensions of the mel spectrogram output
+     * @returns {Promise<Object>} - A promise that resolves to an ONNX tensor containing the speech embeddings
+     */
+    async getEmbeddingFromMelSpectrogramOutput(melSpectogramOutput){
+        const spectogramBuffer = await ONNX.createTensor(
+            "float32",
+            melSpectogramOutput.data,
+            melSpectogramOutput.dims.slice(2)
+        );
+
+        return this.run(spectogramBuffer);
     }
 
     /**
