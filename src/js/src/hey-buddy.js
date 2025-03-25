@@ -9,6 +9,35 @@ import {
 } from "./models.js";
 
 /**
+ * Combines an array of embedding buffers into a single embedding tensor.
+ *
+ * @async
+ * @function
+ * @param {Float32Array[]} embeddingBufferArray - An array of embedding buffers, where each buffer is a Float32Array.
+ * @param {number} numFramesPerEmbedding - The number of frames per embedding.
+ * @param {number} embeddingDim - The dimensionality of each embedding.
+ * @returns {Promise<Object>} A promise that resolves to an ONNX tensor containing the combined embeddings.
+ */
+async function embeddingBufferArrayToEmbedding(embeddingBufferArray, numFramesPerEmbedding, embeddingDim){
+    // Create empty buffer of the right size
+    const combinedEmptyData = new Float32Array(numFramesPerEmbedding * embeddingBufferArray.length * embeddingDim);
+    
+    // Create tensor with the empty buffer
+    const embeddingBuffer = await ONNX.createTensor(
+        "float32",
+        combinedEmptyData,
+        [numFramesPerEmbedding * embeddingBufferArray.length, embeddingDim]
+    );
+
+    // Fill the buffer with data
+    for (let i = 0; i < embeddingBufferArray.length; i++) {
+        const embedding = embeddingBufferArray[i];
+        embeddingBuffer.data.set(embedding.data, i * numFramesPerEmbedding * embeddingDim);
+    }
+    return embeddingBuffer;
+}
+
+/**
  * HeyBuddy class for running wake word detection.
  */
 export class HeyBuddy {
@@ -36,9 +65,9 @@ export class HeyBuddy {
         options = options || {};
         // Get options or use defaults for runtime
         this.debug = options.debug || false;
-        this.positiveVadThreshold = options.positiveVadThreshold || 0.65;
-        this.negativeVadThreshold = options.negativeVadThreshold || 0.4;
-        this.negativeVadCount = options.negativeVadCount || 8;
+        options.positiveVadThreshold = options.positiveVadThreshold || 0.65;
+        options.negativeVadThreshold = options.negativeVadThreshold || 0.4;
+        options.negativeVadCount = options.negativeVadCount || 8;
         this.wakeWordThreads = options.wakeWordThreads || 4;
         this.wakeWordThreshold = options.wakeWordThreshold || 0.5;
         this.wakeWordInterval = options.wakeWordInterval || 2.0; // How often a wake word can be uttered
@@ -59,13 +88,12 @@ export class HeyBuddy {
         const wakeWordEmbeddingFrames = options.wakeWordEmbeddingFrames || 16;
 
         // Initialize shared models
-        this.vad = new SileroVAD(vadModelPath);
+        this.vad = new SileroVAD(vadModelPath, this.targetSampleRate, options.positiveVadThreshold, options.negativeVadThreshold, options.negativeVadCount);
         this.vad.test(this.debug);
 
         this.spectrogram = new MelSpectrogram(spectrogramModelPath);
         this.spectrogram.test(this.debug);
         this.spectrogramMelBins = spectrogramMelBins;
-        this.spectrogramBuffer = null;
 
         this.embedding = new SpeechEmbedding(
             embeddingModelPath,
@@ -78,6 +106,7 @@ export class HeyBuddy {
         this.embeddingWindowSize = embeddingWindowSize;
         this.embeddingWindowStride = embeddingWindowStride;
         this.embeddingBuffer = null;
+        this.embeddingBufferArray = []
 
         // Initialize wake word models
         this.wakeWords = {};
@@ -85,13 +114,11 @@ export class HeyBuddy {
         this.wakeWordEmbeddingFrames = wakeWordEmbeddingFrames;
         for (let model of modelArray) {
             let modelName = model.split("/").pop().split(".")[0];
-            this.wakeWords[modelName] = new WakeWord(model);
+            this.wakeWords[modelName] = new WakeWord(model, this.wakeWordThreshold);
             this.wakeWords[modelName].test(this.debug);
         }
 
         // Initialize state
-        this.listening = false;
-        this.negatives = 0;
         this.recording = false;
         this.audioBuffer = null;
         this.frameIntervalEma = 0;
@@ -256,7 +283,7 @@ export class HeyBuddy {
      */
     async checkWakeWordSubset(wakeWordNames) {
         return await Promise.all(
-            wakeWordNames.map(name => this.wakeWords[name].run(this.embeddingBuffer))
+            wakeWordNames.map(name => this.wakeWords[name].checkWakeWordCalled(this.embeddingBuffer))
         );
     }
 
@@ -267,15 +294,15 @@ export class HeyBuddy {
     async checkWakeWords() {
         const returnMap = {};
         for (let nameChunk of this.chunkedWakeWords) {
-            const wakeWordProbabilities = await this.checkWakeWordSubset(nameChunk);
+            const wakeWordsCalled = await this.checkWakeWordSubset(nameChunk);
             for (let i = 0; i < nameChunk.length; i++) {
                 const name = nameChunk[i];
-                const probability = wakeWordProbabilities[i];
-                returnMap[name] = probability;
+                const wordCalled = wakeWordsCalled[i];
+                returnMap[name] = wordCalled;
             }
         }
         for (let name in returnMap) {
-            if (returnMap[name] > this.wakeWordThreshold) {
+            if (returnMap[name].detected) {
                 this.wakeWordDetected(name);
             }
         }
@@ -290,7 +317,6 @@ export class HeyBuddy {
         // Start timer
         this.frameStart = (new Date()).getTime();
 
-        let timeSinceLastFrame;
         if (this.frameEnd !== undefined && this.frameEnd !== null) {
             this.frameInterval = this.frameStart - this.frameEnd;
         } else {
@@ -305,103 +331,39 @@ export class HeyBuddy {
         // Get the last batch of samples
         const lastBatch = audio.subarray(audio.length - this.batcher.batchIntervalSamples);
 
-        // Run VAD on it
-        const speechProbability = await this.vad.run(lastBatch);
-        const hasSpeech = speechProbability > this.positiveVadThreshold;
-        const hasSilence = speechProbability < this.negativeVadThreshold;
-
         // Calculate the spectrogram for this buffer, assert it is exactly one window
         const spectrograms = await this.spectrogram.run(audio);
-        this.spectrogramBuffer = await ONNX.createTensor(
-            "float32",
-            spectrograms.data,
-            spectrograms.dims.slice(2)
-        );
-        
-        // Calculate new embedding, assert it is one embedding frame
-        const embedding = await this.embedding.run(this.spectrogramBuffer);
+        const embedding = await this.embedding.getEmbeddingFromMelSpectrogramOutput(spectrograms);
+        const numFramesPerEmbedding = embedding.dims[0];
+        const maxEmbeddings = this.wakeWordEmbeddingFrames/numFramesPerEmbedding;
 
-        // Push the embedding into the buffer
-        if (this.embeddingBuffer === null) {
-            this.embeddingBuffer = await ONNX.createTensor(
-                "float32",
-                embedding.data,
-                [embedding.dims[embedding.dims.length-2], this.embeddingDim]
-            );
-        } else {
-            const toShift = this.embeddingBuffer.dims[0] + embedding.dims[0] - this.wakeWordEmbeddingFrames;
-            // Shift back
-            if (toShift > 0) {
-                if (this.embeddingBuffer.dims[0] < this.wakeWordEmbeddingFrames) {
-                    const embeddingData = new Float32Array(this.wakeWordEmbeddingFrames * this.embeddingDim);
-                    embeddingData.set(this.embeddingBuffer.data.subarray(toShift * this.embeddingDim));
-                    embeddingData.set(embedding.data, this.wakeWordEmbeddingFrames - embedding.dims[0]);
-                    this.embeddingBuffer = await ONNX.createTensor(
-                        "float32",
-                        embeddingData,
-                        [this.wakeWordEmbeddingFrames, this.embeddingDim]
-                    );
-                } else {
-                    this.embeddingBuffer.data.set(this.embeddingBuffer.data.subarray(toShift * this.embeddingDim));
-                    this.embeddingBuffer.data.set(embedding.data, this.embeddingBuffer.length - this.embeddingDim);
-                }
-            } else {
-                // Append
-                const embeddingData = new Float32Array(this.embeddingBuffer.data.length + embedding.data.length);
-                embeddingData.set(this.embeddingBuffer.data);
-                embeddingData.set(embedding.data, this.embeddingBuffer.data.length);
-                this.embeddingBuffer = await ONNX.createTensor(
-                    "float32",
-                    embeddingData,
-                    [this.embeddingBuffer.dims[0] + embedding.dims[0], this.embeddingDim]
-                );
-            }
-        }
+        this.embeddingBufferArray.push(embedding);
 
-        // Debounce VAD negatives and trigger events
-        if (!hasSpeech) {
-            if (hasSilence) {
-                this.negatives += 1;
-            }
-            if (this.negatives > this.negativeVadCount) {
-                if (this.listening) {
-                    this.speechEnd();
-                }
-                this.listening = false;
-            }
-        } else {
-            this.negatives = 0;
-            if (!this.listening) {
-                this.speechStart();
-            }
-            this.listening = true;
-        }
+        if (this.embeddingBufferArray.length > maxEmbeddings) this.embeddingBufferArray.shift();
 
-        if (this.listening && this.embeddingBuffer.dims[0] === this.wakeWordEmbeddingFrames) {
+        this.embeddingBuffer = await embeddingBufferArrayToEmbedding(this.embeddingBufferArray, numFramesPerEmbedding, this.embeddingDim);
+
+        const {isSpeaking, speechProbability, justStoppedSpeaking, justStartedSpeaking} = await this.vad.hasSpeechAudio(lastBatch);
+
+        if(justStartedSpeaking) this.speechStart();
+        if(justStoppedSpeaking) this.speechEnd();
+
+        if (isSpeaking && this.embeddingBuffer.dims[0] === this.wakeWordEmbeddingFrames) {
             // If we're listening, run wake word detection
-            const probabilities = await this.checkWakeWords();
+            const wakeWordsCalled = await this.checkWakeWords();
             // Trigger callbacks with processed data
             this.processed({
                 listening: true,
                 recording: this.recording,
-                speech: {probability: speechProbability, active: hasSpeech},
-                wakeWords: Object.entries(probabilities).reduce(
-                    (carry, [name, probability]) => {
-                        carry[name] = {
-                            probability,
-                            active: probability > this.wakeWordThreshold
-                        };
-                        return carry;
-                    },
-                    {}
-                )
+                speech: {probability: speechProbability, active: isSpeaking},
+                wakeWords: wakeWordsCalled
             });
         } else {
             // Trigger callbacks right away if we're not listening
             this.processed({
                 listening: false,
                 recording: this.recording,
-                speech: {probability: speechProbability, active: hasSpeech},
+                speech: {probability: speechProbability, active: isSpeaking},
                 wakeWords: Object.entries(this.wakeWords).reduce(
                     (carry, [name, model]) => {
                         carry[name] = {

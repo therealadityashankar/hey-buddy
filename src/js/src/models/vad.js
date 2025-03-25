@@ -11,15 +11,21 @@ export class SileroVAD extends ONNXModel {
      * Constructor
      * @param {string} modelPath - Path to the ONNX model
      * @param {number} sampleRate - Sample rate of the input audio
+     * @param {number} speechVadThreshold - Threshold for speech detection (default: 0.65)
+     * @param {number} silenceVadThreshold - Threshold for silence detection (default: 0.4)
+     * @param {number} silentFramesCount - Number of silent frames to consider speech ended (default: 10)
      */
     constructor(
         modelPath = "/pretrained/silero-vad.onnx",
+        sampleRate = 16000,
+        speechVadThreshold = 0.65,
+        silenceVadThreshold = 0.4,
+        silentFramesCount = 10,
         power = 0,
         webnn = 1,
         webgpu = 2,
         webgl = 3,
         wasm = 4,
-        sampleRate = 16000,
     ) {
         super(
             modelPath,
@@ -30,6 +36,11 @@ export class SileroVAD extends ONNXModel {
             wasm,
         );
         this.sampleRate = sampleRate || 16000;
+        this.speechVadThreshold = speechVadThreshold;
+        this.silenceVadThreshold = silenceVadThreshold;
+        this.silentFramesCount = silentFramesCount;
+        this.silentFrames = 0;
+        this.isSpeaking = false;
     }
 
     /**
@@ -70,5 +81,52 @@ export class SileroVAD extends ONNXModel {
         this.c = output.cn;
         this.h = output.hn;
         return output.output.data[0];
+    }
+
+    /**
+     * Determines if speech is present in the audio with debouncing logic
+     * also, if someone speaks, then is quiet for sometime and speaks more
+     * that doesn't mean there was no speech in the middle
+     * like that whole thing needs to be considered as speech
+     * we do this alot lol
+     * 
+     * @param {Float32Array} audio - Audio data to check for speech
+     * @returns {Promise<Object>} - Promise that resolves with an object containing:
+     *   - isSpeaking: boolean - true if speech is detected, false otherwise
+     *   - probability: number - the raw VAD probability score (0-1)
+     */
+    async hasSpeechAudio(audio) {
+        // Run VAD on the audio
+        const speechProbability = await this.run(audio);
+        const hasSpeech         = speechProbability > this.speechVadThreshold;
+        const hasSilence        = speechProbability < this.silenceVadThreshold;
+        let justStoppedSpeaking = false;
+        let justStartedSpeaking = false;
+        
+        // Update speech state with debouncing
+        if (!hasSpeech) {
+            if (hasSilence) {
+                this.silentFrames += 1;
+            
+                if (this.isSpeaking && this.silentFrames > this.silentFramesCount) {
+                    this.isSpeaking = false;
+                    justStoppedSpeaking = true;
+                }
+            }
+        } else {
+            this.silentFrames = 0;
+            if(!this.isSpeaking){
+                this.isSpeaking = true;
+                justStartedSpeaking = true;
+            }
+        }
+        
+        // Return both the speech state and the probability
+        return {
+            isSpeaking: this.isSpeaking,
+            speechProbability,
+            justStoppedSpeaking,
+            justStartedSpeaking
+        };
     }
 }

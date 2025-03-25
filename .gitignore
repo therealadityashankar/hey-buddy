@@ -3,3 +3,4 @@ src/python/heybuddy/pretrained
 dist
 __pycache__
 **/__pycache__
+venv

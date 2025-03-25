@@ -8,6 +8,24 @@ import { ONNXModel } from "./base.js";
  */
 export class WakeWord extends ONNXModel {
     /**
+     * Constructor
+     * @param {string} modelPath - Path to the ONNX model
+     * @param {number} threshold - Threshold for wake word detection (default: 0.5)
+     */
+    constructor(
+        modelPath,
+        threshold,
+        power = 0,
+        webnn = 1,
+        webgpu = 2,
+        webgl = 3,
+        wasm = 4
+    ) {
+        super(modelPath, power, webnn, webgpu, webgl, wasm);
+        this.threshold = threshold;
+    }
+
+    /**
      * Test the model
      * @param {boolean} debug - Whether to log debug messages
      * @throws {Error} - If the model test fails
@@ -47,5 +65,28 @@ export class WakeWord extends ONNXModel {
         }
         const output = await this.session.run(input);
         return output.output.data[0] * 1;
+    }
+
+    /**
+     * Check if the wake word is detected based on the threshold
+     * @param {Float32Array} embeddings - Input embeddings
+     * @returns {Promise<Object>} - Promise that resolves with an object containing probability and detected status
+     */
+    async checkWakeWordCalled(embeddings) {
+        const probability = await this.run(embeddings);
+
+        return {
+            probability,
+            detected: probability >= this.threshold
+        };
+    }
+
+    /**
+     * Run wake word detection on audio.
+     * @param {Float32Array} embeddings - Input embeddings
+     * @returns {Promise} - Promise that resolves when wake word detection is complete.
+     */
+    async checkWakeWordPresent(embeddings) {
+        return await this.execute(embeddings);
     }
 }
