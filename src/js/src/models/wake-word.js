@@ -75,9 +75,6 @@ export class WakeWord extends ONNXModel {
     async checkWakeWordCalled(embeddings) {
         const probability = await this.run(embeddings);
 
-        if (probability > this.threshold) {
-            console.log("detected probability, threshold", probability, this.threshold)
-        }
         return {
             probability,
             detected: probability >= this.threshold

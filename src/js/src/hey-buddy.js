@@ -8,6 +8,16 @@ import {
     WakeWord
 } from "./models.js";
 
+/**
+ * Combines an array of embedding buffers into a single embedding tensor.
+ *
+ * @async
+ * @function
+ * @param {Float32Array[]} embeddingBufferArray - An array of embedding buffers, where each buffer is a Float32Array.
+ * @param {number} numFramesPerEmbedding - The number of frames per embedding.
+ * @param {number} embeddingDim - The dimensionality of each embedding.
+ * @returns {Promise<Object>} A promise that resolves to an ONNX tensor containing the combined embeddings.
+ */
 async function embeddingBufferArrayToEmbedding(embeddingBufferArray, numFramesPerEmbedding, embeddingDim){
     // Create empty buffer of the right size
     const combinedEmptyData = new Float32Array(numFramesPerEmbedding * embeddingBufferArray.length * embeddingDim);
@@ -24,7 +34,7 @@ async function embeddingBufferArrayToEmbedding(embeddingBufferArray, numFramesPe
         const embedding = embeddingBufferArray[i];
         embeddingBuffer.data.set(embedding.data, i * numFramesPerEmbedding * embeddingDim);
     }
-    return embeddingBuffer
+    return embeddingBuffer;
 }
 
 /**
@@ -324,14 +334,14 @@ export class HeyBuddy {
         // Calculate the spectrogram for this buffer, assert it is exactly one window
         const spectrograms = await this.spectrogram.run(audio);
         const embedding = await this.embedding.getEmbeddingFromMelSpectrogramOutput(spectrograms);
-        const numFramesPerEmbedding = embedding.dims[0]
+        const numFramesPerEmbedding = embedding.dims[0];
         const maxEmbeddings = this.wakeWordEmbeddingFrames/numFramesPerEmbedding;
 
-        this.embeddingBufferArray.push(embedding)
+        this.embeddingBufferArray.push(embedding);
 
-        if (this.embeddingBufferArray.length > maxEmbeddings) this.embeddingBufferArray.shift()
+        if (this.embeddingBufferArray.length > maxEmbeddings) this.embeddingBufferArray.shift();
 
-        this.embeddingBuffer = await embeddingBufferArrayToEmbedding(this.embeddingBufferArray, numFramesPerEmbedding, this.embeddingDim)
+        this.embeddingBuffer = await embeddingBufferArrayToEmbedding(this.embeddingBufferArray, numFramesPerEmbedding, this.embeddingDim);
 
         const {isSpeaking, speechProbability, justStoppedSpeaking, justStartedSpeaking} = await this.vad.hasSpeechAudio(lastBatch);
 
