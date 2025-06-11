@@ -7,7 +7,7 @@ from setuptools import find_packages, setup
 deps = [
     "audiomentations", "click", "datasets", "librosa", "matplotlib",
     "monotonic_align", "onnx", "onnxruntime", "phonemizer",
-    "pronouncing", "psutil", "pyav", "requests", "safetensors",
+    "pronouncing", "psutil", "av", "requests", "safetensors",
     "soundfile", "speechbrain", "tokenizers", "torch", "torch_audiomentations",
     "torchaudio", "torchmetrics", "tqdm", "wandb"
 ]
@@ -20,7 +20,7 @@ extra_deps = {
 setup(
     name="heybuddy",
     description="Hey Buddy is a tool for training wake-word-detecting neural networks for use in web browsers.",
-    version="0.1.0",
+    version="0.1.1",
     long_description=open("README.md", "r", encoding="utf-8").read(),
     long_description_content_type="text/markdown",
     license="Apache 2.0",
