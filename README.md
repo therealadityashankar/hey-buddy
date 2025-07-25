@@ -396,10 +396,10 @@ heyBuddy.onProcessed((result) => {
 To use the torch model directly, you can do the following.
 
 ```py
-from heybuddy import WakeWord
+from heybuddy import WakeWordMLPModel
 
 audio = "/path/to/audio.wav" # OR flac OR mp3 OR numpy array/tensor (int16 or float32) OR list of the same
-model = WakeWord.from_file("/path/to/model.pt")
+model = WakeWordMLPModel.from_file("/path/to/model.pt")
 model.to("cuda") # optional
 predictions = model.predict(
     audio,
