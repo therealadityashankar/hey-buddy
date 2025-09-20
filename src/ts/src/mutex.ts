@@ -5,6 +5,7 @@
  * @class
  */
 export class MutexLock {
+    holder : Promise<void>;
     /**
      * Creates a new MutexLock.
      *
@@ -21,10 +22,10 @@ export class MutexLock {
      * Responds with a callable that releases the lock.
      */
     acquire() {
-        let awaitResolve,
+        let awaitResolve : any,
             temporaryPromise = new Promise((resolve) => {
                 awaitResolve = () => resolve();
-            }),
+            }) as Promise<void>,
             returnValue = this.holder.then(() => awaitResolve);
         this.holder = temporaryPromise;
         return returnValue;

@@ -1,12 +1,14 @@
 /** @module hey-buddy */
-import { ONNX } from "./onnx.js";
-import { AudioBatcher } from "./audio.js";
+import { ONNX } from "./onnx";
+import { AudioBatcher } from "./audio";
 import {
     SileroVAD,
     SpeechEmbedding,
     MelSpectrogram,
     WakeWord
-} from "./models.js";
+} from "./models";
+
+console.log("HeyBuddy module loaded");
 
 /**
  * Combines an array of embedding buffers into a single embedding tensor.
@@ -18,7 +20,7 @@ import {
  * @param {number} embeddingDim - The dimensionality of each embedding.
  * @returns {Promise<Object>} A promise that resolves to an ONNX tensor containing the combined embeddings.
  */
-async function embeddingBufferArrayToEmbedding(embeddingBufferArray, numFramesPerEmbedding, embeddingDim){
+async function embeddingBufferArrayToEmbedding(embeddingBufferArray : Float32Array[], numFramesPerEmbedding : number, embeddingDim : number){
     // Create empty buffer of the right size
     const combinedEmptyData = new Float32Array(numFramesPerEmbedding * embeddingBufferArray.length * embeddingDim);
     
@@ -32,15 +34,71 @@ async function embeddingBufferArrayToEmbedding(embeddingBufferArray, numFramesPe
     // Fill the buffer with data
     for (let i = 0; i < embeddingBufferArray.length; i++) {
         const embedding = embeddingBufferArray[i];
+        // @ts-expect-error, i am too tired to correct this
         embeddingBuffer.data.set(embedding.data, i * numFramesPerEmbedding * embeddingDim);
     }
     return embeddingBuffer;
+}
+
+interface HeyBuddyOptions {
+    debug?: boolean;
+    positiveVadThreshold?: number;
+    negativeVadThreshold?: number;
+    negativeVadCount?: number;
+    wakeWordThreads?: number;
+    wakeWordThreshold?: number;
+    wakeWordInterval?: number;
+    modelPath?: string | string[];
+    vadModelPath?: string;
+    embeddingModelPath?: string;
+    spectrogramModelPath?: string;
+    batchSeconds?: number;
+    batchIntervalSeconds?: number;
+    targetSampleRate?: number;
+    spectrogramMelBins?: number;
+    embeddingDim?: number;
+    embeddingWindowSize?: number;
+    embeddingWindowStride?: number;
+    wakeWordEmbeddingFrames?: number;
 }
 
 /**
  * HeyBuddy class for running wake word detection.
  */
 export class HeyBuddy {
+    debug : boolean;
+    vad : SileroVAD;
+    spectrogram : MelSpectrogram;
+    spectrogramMelBins : number;
+    embedding : SpeechEmbedding;
+    embeddingDim : number;
+    embeddingWindowSize : number;
+    embeddingWindowStride : number;
+    embeddingBuffer : any; // ONNX tensor
+    embeddingBufferArray : Float32Array[];
+    wakeWords : {[key: string]: WakeWord};
+    wakeWordTimes : {[key: string]: number};
+    wakeWordThreads : number;
+    wakeWordThreshold : number;
+    wakeWordInterval : number;
+    wakeWordEmbeddingFrames : number;
+    recording : boolean;
+    audioBuffer : Float32Array | null;
+    frameStart? : number | null;
+    frameEnd? : number | null;
+    frameInterval? : number;
+    frameIntervalEma : number;
+    frameIntervalEmaWeight : number;
+    frameTime? : number;
+    frameTimeEma : number;
+    frameTimeEmaWeight : number;
+    targetSampleRate : number;
+    speechStartCallbacks : Function[];
+    speechEndCallbacks : Function[];
+    recordingCallbacks : Function[];
+    processedCallbacks : Function[];
+    detectedCallbacks : {names: string | string[], callback: Function}[];
+    batcher : AudioBatcher;
     /**
      * Create a HeyBuddy instance.
      * @param {Object} [options] - Options object.
@@ -60,8 +118,9 @@ export class HeyBuddy {
      * @param {number} [options.embeddingDim=96] - Dimension of speech embedding.
      * @param {number} [options.embeddingWindowSize=76] - Window size for speech embedding.
      * @param {number} [options.embeddingWindowStride=8] - Window stride for speech embedding.
+     * @param {number} [options.targetSampleRate=16000] - Target sample rate for audio.
      */
-    constructor (options) {
+    constructor (options ?: HeyBuddyOptions) {
         options = options || {};
         // Get options or use defaults for runtime
         this.debug = options.debug || false;
@@ -86,6 +145,8 @@ export class HeyBuddy {
         const embeddingWindowSize = options.embeddingWindowSize || 76;
         const embeddingWindowStride = options.embeddingWindowStride || 8;
         const wakeWordEmbeddingFrames = options.wakeWordEmbeddingFrames || 16;
+
+        this.targetSampleRate = targetSampleRate || 16000;
 
         // Initialize shared models
         this.vad = new SileroVAD(vadModelPath, this.targetSampleRate, options.positiveVadThreshold, options.negativeVadThreshold, options.negativeVadCount);
@@ -113,7 +174,12 @@ export class HeyBuddy {
         this.wakeWordTimes = {};
         this.wakeWordEmbeddingFrames = wakeWordEmbeddingFrames;
         for (let model of modelArray) {
-            let modelName = model.split("/").pop().split(".")[0];
+            const afterSlash = model.split("/").pop();
+
+            if (!afterSlash) {
+                throw new Error(`Invalid model path: ${model}, model must have a slash (/) in it`);
+            }
+            let modelName = afterSlash.split(".")[0];
             this.wakeWords[modelName] = new WakeWord(model, this.wakeWordThreshold);
             this.wakeWords[modelName].test(this.debug);
         }
@@ -138,7 +204,7 @@ export class HeyBuddy {
             batchIntervalSeconds,
             targetSampleRate
         );
-        this.batcher.onBatch((batch) => this.process(batch));
+        this.batcher.onBatch((batch : any) => this.process(batch));
     }
 
     /**
@@ -146,7 +212,7 @@ export class HeyBuddy {
      * @returns {string[][]} - Names of wake words.
      */
     get chunkedWakeWords() {
-        return Object.keys(this.wakeWords).reduce((carry, name, i) => {
+        return Object.keys(this.wakeWords).reduce((carry : any[], name, i) => {
             const chunkIndex = Math.floor(i / this.wakeWordThreads);
             if (!carry[chunkIndex]) {
                 carry[chunkIndex] = [];
@@ -161,7 +227,7 @@ export class HeyBuddy {
      * @param {string|string[]} names - Name of wake word.
      * @param {Function} callback - Callback function.
      */
-    onDetected(names, callback) {
+    onDetected(names: string|string[], callback: Function) {
         this.detectedCallbacks.push({names, callback});
     }
 
@@ -169,7 +235,7 @@ export class HeyBuddy {
      * Add a callback for processed data.
      * @param {Function} callback - Callback function.
      */
-    onProcessed(callback) {
+    onProcessed(callback : Function) {
         this.processedCallbacks.push(callback);
     }
 
@@ -177,7 +243,7 @@ export class HeyBuddy {
      * Add a callback for speech start.
      * @param {Function} callback - Callback function.
      */
-    onSpeechStart(callback) {
+    onSpeechStart(callback : Function) {
         this.speechStartCallbacks.push(callback);
     }
 
@@ -185,7 +251,7 @@ export class HeyBuddy {
      * Add a callback for speech end.
      * @param {Function} callback - Callback function.
      */
-    onSpeechEnd(callback) {
+    onSpeechEnd(callback : Function) {
         this.speechEndCallbacks.push(callback);
     }
 
@@ -193,7 +259,7 @@ export class HeyBuddy {
      * Add a callback for recording.
      * @param {Function} callback - Callback function.
      */
-    onRecording(callback) {
+    onRecording(callback : Function) {
         this.recordingCallbacks.push(callback);
     }
 
@@ -248,7 +314,7 @@ export class HeyBuddy {
      * Trigger wake word detection event.
      * @param {string} name - Name of wake word.
      */
-    wakeWordDetected(name) {
+    wakeWordDetected(name : string) {
         const now = Date.now();
         if (this.wakeWordTimes[name] && (now - this.wakeWordTimes[name]) < this.wakeWordInterval * 1000) {
             return;
@@ -270,7 +336,7 @@ export class HeyBuddy {
      * Trigger processed event.
      * @param {Object} data - Processed data.
      */
-    processed(data) {
+    processed(data : any) {
         for (let callback of this.processedCallbacks) {
             callback(data);
         }
@@ -281,7 +347,7 @@ export class HeyBuddy {
      * @param {string[]} wakeWordNames - Names of wake words to check.
      * @returns {Promise} - Promise that resolves when wake word detection is complete.
      */
-    async checkWakeWordSubset(wakeWordNames) {
+    async checkWakeWordSubset(wakeWordNames : string[]) {
         return await Promise.all(
             wakeWordNames.map(name => this.wakeWords[name].checkWakeWordCalled(this.embeddingBuffer))
         );
@@ -292,7 +358,7 @@ export class HeyBuddy {
      * @returns {Promise} - Promise that resolves when wake word detection is complete.
      */
     async checkWakeWords() {
-        const returnMap = {};
+        const returnMap = {} as {[key: string]: {probability: number, detected: boolean}};
         for (let nameChunk of this.chunkedWakeWords) {
             const wakeWordsCalled = await this.checkWakeWordSubset(nameChunk);
             for (let i = 0; i < nameChunk.length; i++) {
@@ -313,7 +379,7 @@ export class HeyBuddy {
      * Process audio batch.
      * @param {Float32Array} audio - Audio samples.
      */
-    async process(audio) {
+    async process(audio : Float32Array) {
         // Start timer
         this.frameStart = (new Date()).getTime();
 
@@ -367,7 +433,7 @@ export class HeyBuddy {
                 recording: this.recording,
                 speech: {probability: speechProbability, active: isSpeaking},
                 wakeWords: Object.entries(this.wakeWords).reduce(
-                    (carry, [name, model]) => {
+                    (carry : Record<string, {probability: number, active: boolean}>, [name, _]) => {
                         carry[name] = {
                             probability: 0.0,
                             active: false
@@ -403,4 +469,13 @@ export class HeyBuddy {
     }
 };
 
-globalThis.HeyBuddy = HeyBuddy;
+// Expose HeyBuddy globally
+
+// typescript, declaration
+declare global {
+    interface Window {
+        HeyBuddy: typeof HeyBuddy;
+    }
+}
+
+window.HeyBuddy = HeyBuddy;

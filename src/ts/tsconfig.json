@@ -6,9 +6,9 @@
 
     /* Language and Module settings */
     "target": "ES2022",
-    "module": "ES6",
-    "moduleResolution": "node",
-    "lib": ["ES2022"],
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM"],
     "allowJs": true,
     "checkJs": false,
 
@@ -31,7 +31,8 @@
     "noImplicitReturns": true,
 
     /* Source maps for debugging */
-    "sourceMap": true
+    "sourceMap": true,
+    "noEmitOnError": false
   },
   "include": ["src"],
   "exclude": ["node_modules", "dist"]

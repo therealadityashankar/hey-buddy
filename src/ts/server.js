@@ -7,6 +7,10 @@ const port = 3000;
 // Serve static files from the "src" directory
 app.use(express.static(path.join(__dirname, 'src')));
 
+// serve the "dist" directory for bundled files
+app.use("/dist", express.static(path.join(__dirname, 'dist')));
+
+
 // Serve the "pretrained" directory for pre-trained models
 app.use("/pretrained", express.static(path.join(__dirname, 'pretrained')));
 

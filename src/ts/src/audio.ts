@@ -8,15 +8,26 @@ const workletUrl = URL.createObjectURL(workletBlob);
  * A class that batches audio samples and calls a callback with the batch.
  */
 export class AudioBatcher {
+    initialized : boolean;
+    callbacks : Function[];
+    batchSeconds : number;
+    batchIntervalSeconds : number;
+    batchIntervalCount : number;
+    targetSampleRate : number;
+    buffer : Float32Array;
+    stream? : MediaStream;
+    audioContext? : AudioContext;
+    sourceNode? : MediaStreamAudioSourceNode;
+    workerNode? : AudioNode;
     /**
      * @param {number} batchSeconds - The number of seconds to batch.
      * @param {number} batchIntervalSeconds - The number of seconds to wait before calling the callback.
      * @param {number} targetSampleRate - The target sample rate of the worklet.
      */
     constructor(
-        batchSeconds=2.0,
-        batchIntervalSeconds=0.05, // 50ms
-        targetSampleRate=16000,
+        batchSeconds:number=2.0,
+        batchIntervalSeconds:number=0.05, // 50ms
+        targetSampleRate:number=16000,
     ) {
         this.initialized = false;
         this.callbacks = [];
@@ -56,7 +67,7 @@ export class AudioBatcher {
      * Pushes new audio samples into the buffer.
      * @param {Float32Array} data - The new audio samples.
      */
-    push(data) {
+    push(data : Float32Array) {
         const dataLength = data.length;
         // Shift the buffer back by this much
         this.buffer.set(this.buffer.subarray(dataLength));
@@ -74,7 +85,7 @@ export class AudioBatcher {
      * Adds a callback to be called with each batch.
      * @param {Function} callback - The callback to add.
      */
-    onBatch(callback) {
+    onBatch(callback : Function) {
         this.callbacks.push(callback);
     }
 
@@ -82,7 +93,7 @@ export class AudioBatcher {
      * Removes a callback from the list of callbacks.
      * @param {Function} callback - The callback to remove.
      */
-    offBatch(callback) {
+    offBatch(callback : Function) {
         this.callbacks = this.callbacks.filter(c => c !== callback);
     }
 
@@ -110,10 +121,13 @@ export class AudioBatcher {
             this.audioContext,
             this.targetSampleRate,
         );
+
         this.sourceNode.connect(this.workerNode.worker);
-        this.workerNode.worker.port.onmessage = (event) => {
+
+        this.workerNode.worker.port.onmessage = (event : MessageEvent<any>) => {
             this.push(event.data);
         }
+
         this.clearBuffer();
         this.initialized = true;
     }
@@ -123,11 +137,13 @@ export class AudioBatcher {
  * A class that wraps an AudioWorkletNode.
  */
 export class AudioNode {
+    context : AudioContext;
+    worker : AudioWorkletNode;
     /**
      * @param {AudioContext} context - The audio context.
      * @param {AudioWorkletNode} worker - The audio worklet node.
      */
-    constructor(context, worker) {
+    constructor(context : AudioContext, worker : AudioWorkletNode) {
         this.context = context;
         this.worker = worker;
     }
@@ -138,7 +154,7 @@ export class AudioNode {
      * @param {number} targetSampleRate - The target sample rate of the worklet.
      * @returns {Promise<AudioNode>} The created AudioNode.
      */
-    static async create(context, targetSampleRate) {
+    static async create(context : AudioContext, targetSampleRate : number) : Promise<AudioNode> {
         await context.audioWorklet.addModule(workletUrl);
         const workletOptions = {
             processorOptions: {

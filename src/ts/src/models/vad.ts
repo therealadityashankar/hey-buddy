@@ -1,12 +1,21 @@
 /** @module models/vad */
-import { ONNX } from "../onnx.js";
-import { ONNXModel } from "./base.js";
+import { ONNX } from "../onnx";
+import { ONNXModel } from "./base";
 
 /**
  * Silero VAD model
  * @extends ONNXModel
  */
 export class SileroVAD extends ONNXModel {
+    sampleRate : number;
+    speechVadThreshold : number;
+    silenceVadThreshold : number;
+    silentFramesCount : number;
+    silentFrames : number;
+    isSpeaking : boolean;
+    h : any; // ONNX tensor for hidden state
+    c : any; // ONNX tensor for cell state
+    sr : any; // ONNX tensor for sample rate
     /**
      * Constructor
      * @param {string} modelPath - Path to the ONNX model
@@ -16,16 +25,16 @@ export class SileroVAD extends ONNXModel {
      * @param {number} silentFramesCount - Number of silent frames to consider speech ended (default: 10)
      */
     constructor(
-        modelPath = "/pretrained/silero-vad.onnx",
-        sampleRate = 16000,
-        speechVadThreshold = 0.65,
-        silenceVadThreshold = 0.4,
-        silentFramesCount = 10,
-        power = 0,
-        webnn = 1,
-        webgpu = 2,
-        webgl = 3,
-        wasm = 4,
+        modelPath : string = "/pretrained/silero-vad.onnx",
+        sampleRate : number = 16000,
+        speechVadThreshold : number = 0.65,
+        silenceVadThreshold : number = 0.4,
+        silentFramesCount : number = 10,
+        power : number = 0,
+        webnn : number = 1,
+        webgpu : number = 2,
+        webgl : number = 3,
+        wasm : number = 4,
     ) {
         super(
             modelPath,
@@ -65,13 +74,14 @@ export class SileroVAD extends ONNXModel {
      * @returns {Promise} - Promise that resolves with the output of the model, which is a single float
      * @throws {Error} - If the input data is not a Float32Array
      */
-    async execute(input) {
+    async execute(input : Float32Array) : Promise<number> {
         if (this.h === undefined || this.c === undefined || this.sr === undefined) {
             this.sr = await ONNX.createTensor("int64", [this.sampleRate], [1]);
             this.h = await ONNX.createTensor("float32", (new Array(128)).fill(0), [2, 1, 64]);
             this.c = await ONNX.createTensor("float32", (new Array(128)).fill(0), [2, 1, 64]);
         }
         const inputTensor = await ONNX.createTensor("float32", input, [1, input.length]);
+        if(!this.session) throw new Error("Session not loaded");
         const output = await this.session.run({
             input: inputTensor,
             h: this.h,
@@ -80,7 +90,7 @@ export class SileroVAD extends ONNXModel {
         });
         this.c = output.cn;
         this.h = output.hn;
-        return output.output.data[0];
+        return output.output.data[0] as number;
     }
 
     /**
@@ -95,7 +105,7 @@ export class SileroVAD extends ONNXModel {
      *   - isSpeaking: boolean - true if speech is detected, false otherwise
      *   - probability: number - the raw VAD probability score (0-1)
      */
-    async hasSpeechAudio(audio) {
+    async hasSpeechAudio(audio : Float32Array) : Promise<{isSpeaking: boolean, speechProbability: number, justStoppedSpeaking: boolean, justStartedSpeaking: boolean}> {
         // Run VAD on the audio
         const speechProbability = await this.run(audio);
         const hasSpeech         = speechProbability > this.speechVadThreshold;

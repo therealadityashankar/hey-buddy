@@ -32,4 +32,7 @@ module.exports = {
         minimizer: [new TerserPlugin()],
     },
     mode: 'production',
+    resolve: {
+        extensions: ['.ts', '.tsx', '.js', '.jsx', '.json'],
+    },
 };

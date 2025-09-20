@@ -1,9 +1,16 @@
 /** @module onnx */
-import { sleep } from "./helpers.js";
+import { sleep } from "./helpers";
+import type { TensorConstructor, InferenceSessionFactory, TypedTensor, InferenceSession as OrtInferenceSession} from "onnxruntime-web";
 
-let initialized = false, Tensor, InferenceSession;
+// Dynamically import the ONNX Runtime Web API
+// This avoids loading the entire library if it's not needed.
+let initialized = false, Tensor : TensorConstructor, InferenceSession : InferenceSessionFactory;
 
-if (typeof ort !== "undefined") {
+declare global {
+    var ort: any;
+}
+
+if (globalThis.ort !== "undefined") {
     initialized = true;
     Tensor = ort.Tensor;
     InferenceSession = ort.InferenceSession;
@@ -13,6 +20,7 @@ if (typeof ort !== "undefined") {
         Tensor = module.Tensor;
         InferenceSession = module.InferenceSession;
     }).catch(() => {
+        // @ts-expect-error , I am not sure why this was put, but I am going to treat it as religion and leave it here
         import(/* webpackIgnore: true */"./onnxruntime-web/ort.mjs").then((module) => {
             initialized = true;
             Tensor = module.Tensor;
@@ -29,7 +37,7 @@ export class ONNX {
      * Wait for the ONNX Runtime Web API to be initialized.
      * @returns {Promise<void>} A promise that resolves when the ONNX Runtime Web API is initialized.
      */
-    static async waitForInitialization() {
+    static async waitForInitialization() : Promise<void> {
         while (!initialized) {
             await sleep(10);
         }
@@ -42,18 +50,19 @@ export class ONNX {
      * @param {Array<number>} dims The dimensions of the tensor.
      * @returns {Promise<Tensor>} A promise that resolves to a new tensor.
      */
-    static async createTensor(dtype, data, dims) {
+    static async createTensor(dtype: any, data: number[]|Float32Array|Float16Array, dims: number[]|Float32Array|Float16Array) : Promise<TypedTensor<"string"|"float32"|"float64"|"int32"|"int16"|"int8"|"uint8"|"uint16"|"uint32"|"bool">>{
         await ONNX.waitForInitialization();
+        // @ts-expect-error
         return new Tensor(dtype, data, dims);
     }
 
     /**
      * Create a new inference session.
-     * @param {ArrayBuffer} model The model to load.
+     * @param {string} model The model to load
      * @param {Object} [options] The options for the inference session.
      * @returns {Promise<InferenceSession>} A promise that resolves to a new inference session.
      */
-    static async createInferenceSession(model, options = {}) {
+    static async createInferenceSession(model : string, options = {}) : Promise<OrtInferenceSession> {
         await ONNX.waitForInitialization();
         return await InferenceSession.create(model, options);
     }
@@ -63,6 +72,9 @@ export class ONNX {
 // The static methods can still potentially be used, depending on the order of execution.
 // This only saves a cycle or two, but it's better than nothing.
 ONNX.waitForInitialization().then(() => {
-    ONNX.createTensor = (dtype, data, dims) => new Tensor(dtype, data, dims);
+    // @ts-expect-error
+    ONNX.createTensor = (dtype, data, dims) => new Promise(() => new Tensor(dtype, data, dims));
     ONNX.createInferenceSession = (model, options = {}) => InferenceSession.create(model, options);
 });
+
+export type { Tensor, TensorConstructor, InferenceSessionFactory, TypedTensor, OrtInferenceSession };

@@ -1,23 +1,33 @@
 /** @module models/base */
-import { sleep } from "../helpers.js";
-import { ONNX } from "../onnx.js";
+import { sleep } from "../helpers";
+import { ONNX, OrtInferenceSession } from "../onnx";
 
 /**
  * Base class for ONNX models
  */
-export class ONNXModel {
+export abstract class ONNXModel {
+    modelPath : string;
+    session : OrtInferenceSession | null;
+    duration : number; // EMA duration
+    ema : number; // EMA coefficient
+    lastTime : number
+    webnn : number;
+    webgpu : number;
+    webgl : number;
+    wasm : number;
+    power : number;
     /**
      * Constructor
      * @param {string} modelPath - Path to the ONNX model
      * @param {Object} options - Options
      */
     constructor(
-        modelPath,
-        power = 0,
-        webnn = 1,
-        webgpu = 2,
-        webgl = 3,
-        wasm = 4,
+        modelPath : string,
+        power : number = 0,
+        webnn : number = 1,
+        webgpu : number = 2,
+        webgl : number = 3,
+        wasm : number = 4,
     ) {
         this.modelPath = modelPath;
         this.session = null;
@@ -70,6 +80,7 @@ export class ONNXModel {
         if (Number.isInteger(this.wasm)) {
             providerIndexes.push(["wasm", this.wasm]);
         }
+        // @ts-expect-error
         providerIndexes.sort((a, b) => a[1] - b[1]);
         return providerIndexes.map((providerIndex) => providerIndex[0]);
     }
@@ -108,16 +119,14 @@ export class ONNXModel {
      * @returns {Promise} - Promise that resolves with the output of the model
      * @throws {Error} - If the method is not implemented
      */
-    async execute(input) {
-        throw new Error("Not Implemented");
-    }
+    abstract execute(input : any) : Promise<any>
 
     /**
      * Run the model
      * @param {Mixed} input - Input data
      * @returns {Promise} - Promise that resolves with the output of the model
      */
-    async run(input) {
+    async run(input : any) : Promise<any> {
         await this.waitUntilLoaded();
         const currentTime = new Date().getTime();
         const result = await this.execute(input);

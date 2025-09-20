@@ -1,6 +1,6 @@
 /** @module models/mel-spectrogram */
-import { ONNX } from "../onnx.js";
-import { ONNXModel } from "./base.js";
+import { ONNX } from "../onnx";
+import { ONNXModel } from "./base";
 
 /**
  * Mel spectrogram model
@@ -12,9 +12,9 @@ export class MelSpectrogram extends ONNXModel {
      * @param {string} modelPath - Path to the ONNX model
      */
     constructor(
-        modelPath = "/pretrained/mel-spectrogram.onnx",
-        power = 0,
-        webnn = 1,
+        modelPath : string = "/pretrained/mel-spectrogram.onnx",
+        power : number = 0,
+        webnn  = 1,
         webgpu = 2,
         webgl = 3,
         wasm = 4,
@@ -54,17 +54,23 @@ export class MelSpectrogram extends ONNXModel {
      * @returns {Promise} - Promise that resolves with the output of the model, which is a 2D array
      * @throws {Error} - If the input data is not a Float32Array
      */
-    async execute(input) {
+    async execute(input : Float32Array) : Promise<any> {
         const inputTensor = await ONNX.createTensor(
             "float32",
             input,
             [1, input.length]
         );
+        if(!this.session) {
+            throw new Error("Model not loaded");
+        }
         const output = await this.session.run({ input: inputTensor });
+
         return await ONNX.createTensor(
             "float32",
-            output.output.data.map((datum) => datum / 10.0 + 2.0),
-            output.output.dims
+            // @ts-expect-error something about number vs bigint that needs to be improved
+            output?.output.data.map((datum) => (datum) / 10.0 + 2.0) as any,
+            // @ts-expect-error something about number vs bigint that needs to be improved
+            output?.output.dims
         );
     }
 }

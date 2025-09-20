@@ -1,7 +1,6 @@
 /** @module models/speech-embedding */
-import { ONNX } from "../onnx.js";
-import { ONNXModel } from "./base.js";
-import { MelSpectrogram } from "./mel-spectrogram.js";
+import { ONNX, TypedTensor } from "../onnx";
+import { ONNXModel } from "./base";
 
 /**
  * Speech Embedding model
@@ -9,6 +8,10 @@ import { MelSpectrogram } from "./mel-spectrogram.js";
  * @extends ONNXModel
  */
 export class SpeechEmbedding extends ONNXModel {
+    embeddingDim : number;
+    windowSize : number;
+    windowStride : number;
+
     /**
      * Constructor
      * @param {string} modelPath - Path to the ONNX model
@@ -19,15 +22,15 @@ export class SpeechEmbedding extends ONNXModel {
      * @param {number} windowStride - Stride of the window
      */
     constructor(
-        modelPath,
-        embeddingDim = 96,
-        windowSize = 76,
-        windowStride = 8,
-        power = 0,
-        webnn = 1,
-        webgpu = 2,
-        webgl = 3,
-        wasm = 4,
+        modelPath : string,
+        embeddingDim : number = 96,
+        windowSize : number = 76,
+        windowStride : number = 8,
+        power : number = 0,
+        webnn : number = 1,
+        webgpu : number = 2,
+        webgl : number = 3,
+        wasm : number = 4,
     ) {
         super(
             modelPath,
@@ -79,7 +82,7 @@ export class SpeechEmbedding extends ONNXModel {
      * @param {Array<number>} melSpectogramOutput.dims - The dimensions of the mel spectrogram output
      * @returns {Promise<Object>} - A promise that resolves to an ONNX tensor containing the speech embeddings
      */
-    async getEmbeddingFromMelSpectrogramOutput(melSpectogramOutput){
+    async getEmbeddingFromMelSpectrogramOutput(melSpectogramOutput : {data: Float32Array, dims: number[]}) : Promise<any> {
         const spectogramBuffer = await ONNX.createTensor(
             "float32",
             melSpectogramOutput.data,
@@ -91,11 +94,11 @@ export class SpeechEmbedding extends ONNXModel {
 
     /**
      * Execute the model
-     * @param {Float32Array} input - Input data
+     * @param {TypedTensor} input - Input data
      * @returns {Promise} - Promise that resolves with the output of the model, which is a 2D array
      * @throws {Error} - If the input data is not a Float32Array
      */
-    async execute(spectrograms) {
+    async execute(spectrograms : TypedTensor<"float32">) : Promise<any> {
         const [numFrames, melBins] = spectrograms.dims;
         if (numFrames < this.windowSize) {
             throw new Error(`Audio is too short to process - require ${this.windowSize} samples, got ${numFrames}`);
@@ -134,16 +137,19 @@ export class SpeechEmbedding extends ONNXModel {
             [numBatches, this.windowSize, melBins, 1]
         );
         for (let i = 0; i < numBatches; i++) {
-            stackedWindowTensor.data.set(windowBatches[i][2].data, i * this.windowSize * melBins);
+            // @ts-expect-error
+            (stackedWindowTensor.data as Float32Array).set(windowBatches[i][2].data, i * this.windowSize * melBins);
         }
+
+        if(!this.session) throw new Error("Session not loaded");
 
         // Execute the model
         // TODO: Determine why this takes so much longer in the browser than it does in python
         const output = await this.session.run({ input_1: stackedWindowTensor });
 
         for (let i = 0; i < numBatches; i++) {
-            embeddings.data.set(
-                output.conv2d_19.data.slice(
+            (embeddings.data as Float32Array).set(
+                (output.conv2d_19.data as Float32Array).slice(
                     i * this.embeddingDim,
                     (i + 1) * this.embeddingDim
                 ),
