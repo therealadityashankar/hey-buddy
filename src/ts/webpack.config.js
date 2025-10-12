@@ -3,7 +3,7 @@ const TerserPlugin = require('terser-webpack-plugin');
 
 module.exports = {
     name: 'main',
-    entry: './src/hey-buddy.ts',
+    entry: './src/hey-buddy.js',
     output: {
         path: path.resolve(__dirname, 'dist'),
         filename: 'hey-buddy.min.js',
@@ -13,11 +13,6 @@ module.exports = {
     },
     module: {
         rules: [
-            {
-                test: /\.tsx?$/,
-                use: 'ts-loader',
-                exclude: /node_modules/,
-            },
             {
                 test: /\.js$/,
                 exclude: /node_modules/,
@@ -32,7 +27,4 @@ module.exports = {
         minimizer: [new TerserPlugin()],
     },
     mode: 'production',
-    resolve: {
-        extensions: ['.ts', '.tsx', '.js', '.jsx', '.json'],
-    },
 };

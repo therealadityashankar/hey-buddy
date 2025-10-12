@@ -1,3 +1,5 @@
+import { HeyBuddy } from "./hey-buddy";
+
 /**
  * Turns floating-point audio samples to a Wave blob.
  * @param {Float32Array} audioSamples - The audio samples to play.

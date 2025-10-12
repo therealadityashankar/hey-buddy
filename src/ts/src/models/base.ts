@@ -63,7 +63,7 @@ export abstract class ONNXModel {
      * @returns {Array} - Execution providers
      */
     get executionProviders() {
-        const providerIndexes = [];
+        const providerIndexes : any[] = [];
         if (Number.isInteger(this.webnn)) {
             providerIndexes.push([{
                 name: "webnn",
@@ -80,7 +80,7 @@ export abstract class ONNXModel {
         if (Number.isInteger(this.wasm)) {
             providerIndexes.push(["wasm", this.wasm]);
         }
-        // @ts-expect-error
+        
         providerIndexes.sort((a, b) => a[1] - b[1]);
         return providerIndexes.map((providerIndex) => providerIndex[0]);
     }

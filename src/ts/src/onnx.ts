@@ -15,17 +15,17 @@ if (globalThis.ort !== "undefined") {
     Tensor = ort.Tensor;
     InferenceSession = ort.InferenceSession;
 } else {
-    import(/*webpackIgnore: true */"onnxruntime-web").then((module) => {
+    import("onnxruntime-web").then((module) => {
         initialized = true;
         Tensor = module.Tensor;
         InferenceSession = module.InferenceSession;
     }).catch(() => {
-        // @ts-expect-error , I am not sure why this was put, but I am going to treat it as religion and leave it here
-        import(/* webpackIgnore: true */"./onnxruntime-web/ort.mjs").then((module) => {
+        /* @ts-expect-error , I am not sure why this was put, but I am going to treat it as religion and leave it here
+        import( webpackIgnore: true *"./onnxruntime-web/ort.mjs").then((module) => {
             initialized = true;
             Tensor = module.Tensor;
             InferenceSession = module.InferenceSession;
-        });
+        }); */
     });
 }
 
@@ -50,9 +50,8 @@ export class ONNX {
      * @param {Array<number>} dims The dimensions of the tensor.
      * @returns {Promise<Tensor>} A promise that resolves to a new tensor.
      */
-    static async createTensor(dtype: any, data: number[]|Float32Array|Float16Array, dims: number[]|Float32Array|Float16Array) : Promise<TypedTensor<"string"|"float32"|"float64"|"int32"|"int16"|"int8"|"uint8"|"uint16"|"uint32"|"bool">>{
+    static async createTensor(dtype: any, data: number[]|Float32Array, dims: number[]|Float32Array) : Promise<TypedTensor<"string"|"float32"|"float64"|"int32"|"int16"|"int8"|"uint8"|"uint16"|"uint32"|"bool">>{
         await ONNX.waitForInitialization();
-        // @ts-expect-error
         return new Tensor(dtype, data, dims);
     }
 
@@ -72,8 +71,7 @@ export class ONNX {
 // The static methods can still potentially be used, depending on the order of execution.
 // This only saves a cycle or two, but it's better than nothing.
 ONNX.waitForInitialization().then(() => {
-    // @ts-expect-error
-    ONNX.createTensor = (dtype, data, dims) => new Promise(() => new Tensor(dtype, data, dims));
+    ONNX.createTensor = (dtype, data, dims) => Promise.resolve(new Tensor(dtype, data, dims));
     ONNX.createInferenceSession = (model, options = {}) => InferenceSession.create(model, options);
 });
 

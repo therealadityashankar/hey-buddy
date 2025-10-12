@@ -4,14 +4,15 @@
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Client Test</title>
-        <link rel="stylesheet" href="style.css" />
+        <link rel="stylesheet" href="./src/style.css" />
         <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.19.0/dist/ort.min.js"></script>
-        <script src="dist/hey-buddy.min.js"></script>
+        <script type="module" src="./src/hey-buddy.ts"></script>
+        <script type="module" src="./src/index.js"></script>
     </head>
     <body>
         <div class="card">
             <section id="logo">
-                <img src="logo.png" alt="Hey Buddy!" />
+                <img src="./src/logo.png" alt="Hey Buddy!" />
             </section>
             <section id="headline">
                 <p><strong><em>Hey Buddy!</em></strong> is a library for training wake word models (a.k.a audio keyword spotters) and deploying them to the browser for real-time use on CPU or GPU.</p>

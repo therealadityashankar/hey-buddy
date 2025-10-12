@@ -112,6 +112,7 @@ export class AudioBatcher {
                 noiseSuppression: true,
             }
         });
+
         this.audioContext = new AudioContext();
         this.sourceNode = new MediaStreamAudioSourceNode(
             this.audioContext,
